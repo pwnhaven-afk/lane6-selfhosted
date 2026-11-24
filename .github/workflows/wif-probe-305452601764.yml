@@ -1,0 +1,31 @@
+name: wif-probe-305452601764
+on:
+  workflow_dispatch:
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: auth
+        id: auth
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+        with:
+          workload_identity_provider: 'projects/305452601764/locations/global/workloadIdentityPools/builders/providers/github'
+          token_format: 'access_token'
+          create_credentials_file: false
+      - name: api-probes
+        run: |
+          TOKEN="${{ steps.auth.outputs.access_token }}"
+          echo "token_len=${#TOKEN}"
+          for u in \
+            "https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=$TOKEN" \
+            "https://cloudresourcemanager.googleapis.com/v1/projects" \
+            "https://iam.googleapis.com/v1/projects/305452601764/locations/global/workloadIdentityPools/builders/providers/github" \
+            "https://iam.googleapis.com/v1/projects/305452601764/serviceAccounts" \
+            "https://storage.googleapis.com/storage/v1/b?project=305452601764" ; do
+            echo "=== $u"
+            curl -sS -w '\nHTTP=%{http_code}\n' -H "Authorization: Bearer $TOKEN" "$u" | head -c 1500
+            echo
+          done
