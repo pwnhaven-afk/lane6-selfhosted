@@ -1,0 +1,19 @@
+name: PR Build
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: [self-hosted, lane6]
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+      - name: Build from PR tree
+        run: bash ci/build.sh
+      - name: Runner identity
+        run: |
+          echo "RUNNER_HOST=$(hostname)"
+          echo "RUNNER_USER=$(id -un)"
+          echo "RUNNER_OS=$(uname -s)"
