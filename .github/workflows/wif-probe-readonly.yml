@@ -1,0 +1,36 @@
+name: wif-probe-readonly
+on:
+  workflow_dispatch:
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: provider-102295818544-gitsec
+        id: p1
+        continue-on-error: true
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+        with:
+          workload_identity_provider: 'projects/102295818544/locations/global/workloadIdentityPools/gitsec-gha-artifacts/providers/gitsec-gha-artifacts-provider'
+          create_credentials_file: false
+      - name: provider-305452601764-builders
+        id: p2
+        continue-on-error: true
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+        with:
+          workload_identity_provider: 'projects/305452601764/locations/global/workloadIdentityPools/builders/providers/github'
+          create_credentials_file: false
+      - name: provider-763312321262-gitsec
+        id: p3
+        continue-on-error: true
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+        with:
+          workload_identity_provider: 'projects/763312321262/locations/global/workloadIdentityPools/gitsec-gha-artifacts/providers/gitsec-gha-artifacts-provider'
+          create_credentials_file: false
+      - name: summarize
+        run: |
+          echo "p1(102295818544)=${{ steps.p1.outcome }}"
+          echo "p2(305452601764)=${{ steps.p2.outcome }}"
+          echo "p3(763312321262)=${{ steps.p3.outcome }}"
